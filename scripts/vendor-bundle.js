@@ -24352,17 +24352,39 @@ define('aurelia-ui-virtualization/virtual-repeat',['exports', 'aurelia-dependenc
       if (!this.scope) {
         return;
       }
+      var reducingItems = false;
+      var previousLastViewIndex = this._getIndexOfLastView();
+
       var items = this.items;
       this.strategy = this.strategyLocator.getStrategy(items);
       if (items.length > 0 && this.viewCount() === 0) {
         this.strategy.createFirstItem(this);
       }
+
+      if (this._itemsLength >= items.length) {
+        this._skipNextScrollHandle = true;
+        reducingItems = true;
+      }
+      this._checkFixedHeightContainer();
       this._calcInitialHeights(items.length);
       if (!this.isOneTime && !this._observeInnerCollection()) {
         this._observeCollection();
       }
+      this.strategy.instanceChanged(this, items, this._first);
+      this._lastRebind = this._first;
 
-      this.strategy.instanceChanged(this, items, this._viewsLength);
+      if (reducingItems && previousLastViewIndex > this.items.length - 1) {
+        this.scrollContainer.scrollTop = this.scrollContainer.scrollTop + this.viewCount() * this.itemHeight;
+      }
+      if (!reducingItems) {
+        this._previousFirst = this._first;
+        this._scrollingDown = true;
+        this._scrollingUp = false;
+
+        this.isLastIndex = this._getIndexOfLastView() >= this.items.length - 1;
+      }
+
+      this._handleScroll();
     };
 
     VirtualRepeat.prototype.unbind = function unbind() {
@@ -24413,6 +24435,10 @@ define('aurelia-ui-virtualization/virtual-repeat',['exports', 'aurelia-dependenc
 
     VirtualRepeat.prototype._handleScroll = function _handleScroll() {
       if (!this._isAttached) {
+        return;
+      }
+      if (this._skipNextScrollHandle) {
+        this._skipNextScrollHandle = false;
         return;
       }
       var itemHeight = this.itemHeight;
@@ -24548,6 +24574,12 @@ define('aurelia-ui-virtualization/virtual-repeat',['exports', 'aurelia-dependenc
       }
     };
 
+    VirtualRepeat.prototype._checkFixedHeightContainer = function _checkFixedHeightContainer() {
+      if (this.domHelper.hasOverflowScroll(this.scrollContainer)) {
+        this._fixedHeightContainer = true;
+      }
+    };
+
     VirtualRepeat.prototype._adjustBufferHeights = function _adjustBufferHeights() {
       this.topBuffer.style.height = this._topBufferHeight + 'px';
       this.bottomBuffer.style.height = this._bottomBufferHeight + 'px';
@@ -24634,20 +24666,34 @@ define('aurelia-ui-virtualization/virtual-repeat',['exports', 'aurelia-dependenc
         }, 500);
         return;
       }
+
       this._itemsLength = itemsLength;
       this.scrollContainerHeight = this._fixedHeightContainer ? this._calcScrollHeight(this.scrollContainer) : document.documentElement.clientHeight;
       this.elementsInView = Math.ceil(this.scrollContainerHeight / this.itemHeight) + 1;
       this._viewsLength = this.elementsInView * 2 + this._bufferSize;
-      this._bottomBufferHeight = this.itemHeight * itemsLength - this.itemHeight * this._viewsLength;
-      if (this._bottomBufferHeight < 0) {
-        this._bottomBufferHeight = 0;
-      }
-      this.bottomBuffer.style.height = this._bottomBufferHeight + 'px';
-      this._topBufferHeight = 0;
-      this.topBuffer.style.height = this._topBufferHeight + 'px';
 
-      this.scrollContainer.scrollTop = 0;
-      this._first = 0;
+      var newBottomBufferHeight = this.itemHeight * itemsLength - this.itemHeight * this._viewsLength;
+      if (newBottomBufferHeight < 0) {
+        newBottomBufferHeight = 0;
+      }
+      if (this._topBufferHeight >= newBottomBufferHeight) {
+        this._topBufferHeight = newBottomBufferHeight;
+        this._bottomBufferHeight = 0;
+        this._first = this._itemsLength - this._viewsLength;
+        if (this._first < 0) {
+          this._first = 0;
+        }
+      } else {
+        this._first = this._getIndexOfFirstView();
+        var adjustedTopBufferHeight = this._first * this.itemHeight;
+        this._topBufferHeight = adjustedTopBufferHeight;
+
+        this._bottomBufferHeight = newBottomBufferHeight - adjustedTopBufferHeight;
+        if (this._bottomBufferHeight < 0) {
+          this._bottomBufferHeight = 0;
+        }
+      }
+      this._adjustBufferHeights();
       return;
     };
 
@@ -27314,8 +27360,8 @@ define('aurelia-ui-virtualization/array-virtual-repeat-strategy',['exports', 'au
       repeat.addView(overrideContext.bindingContext, overrideContext);
     };
 
-    ArrayVirtualRepeatStrategy.prototype.instanceChanged = function instanceChanged(repeat, items) {
-      this._inPlaceProcessItems(repeat, items);
+    ArrayVirtualRepeatStrategy.prototype.instanceChanged = function instanceChanged(repeat, items, first) {
+      this._inPlaceProcessItems(repeat, items, first);
     };
 
     ArrayVirtualRepeatStrategy.prototype._standardProcessInstanceChanged = function _standardProcessInstanceChanged(repeat, items) {
@@ -27325,10 +27371,9 @@ define('aurelia-ui-virtualization/array-virtual-repeat-strategy',['exports', 'au
       }
     };
 
-    ArrayVirtualRepeatStrategy.prototype._inPlaceProcessItems = function _inPlaceProcessItems(repeat, items) {
+    ArrayVirtualRepeatStrategy.prototype._inPlaceProcessItems = function _inPlaceProcessItems(repeat, items, first) {
       var itemsLength = items.length;
       var viewsLength = repeat.viewCount();
-      var first = repeat._getIndexOfFirstView();
 
       while (viewsLength > itemsLength) {
         viewsLength--;
@@ -27349,6 +27394,7 @@ define('aurelia-ui-virtualization/array-virtual-repeat-strategy',['exports', 'au
         view.bindingContext[local] = items[i + first];
         view.overrideContext.$middle = middle;
         view.overrideContext.$last = last;
+        view.overrideContext.$index = i + first;
         repeat.updateBindings(view);
       }
 
@@ -27381,22 +27427,20 @@ define('aurelia-ui-virtualization/array-virtual-repeat-strategy',['exports', 'au
 
       var maybePromise = this._runSplices(repeat, array.slice(0), splices);
       if (maybePromise instanceof Promise) {
-        (function () {
-          var queuedSplices = repeat.__queuedSplices = [];
+        var queuedSplices = repeat.__queuedSplices = [];
 
-          var runQueuedSplices = function runQueuedSplices() {
-            if (!queuedSplices.length) {
-              delete repeat.__queuedSplices;
-              delete repeat.__array;
-              return;
-            }
+        var runQueuedSplices = function runQueuedSplices() {
+          if (!queuedSplices.length) {
+            delete repeat.__queuedSplices;
+            delete repeat.__array;
+            return;
+          }
 
-            var nextPromise = _this2._runSplices(repeat, repeat.__array, queuedSplices) || Promise.resolve();
-            nextPromise.then(runQueuedSplices);
-          };
+          var nextPromise = _this2._runSplices(repeat, repeat.__array, queuedSplices) || Promise.resolve();
+          nextPromise.then(runQueuedSplices);
+        };
 
-          maybePromise.then(runQueuedSplices);
-        })();
+        maybePromise.then(runQueuedSplices);
       }
     };
 
@@ -28620,4 +28664,4 @@ define('aurelia-testing/wait',['exports'], function (exports) {
     }, options);
   }
 });
-function _aureliaConfigureModuleLoader(){requirejs.config({"baseUrl":"src/","paths":{"aurelia-dependency-injection":"../node_modules/aurelia-dependency-injection/dist/amd/aurelia-dependency-injection","aurelia-binding":"../node_modules/aurelia-binding/dist/amd/aurelia-binding","aurelia-bootstrapper":"../node_modules/aurelia-bootstrapper/dist/amd/aurelia-bootstrapper","aurelia-event-aggregator":"../node_modules/aurelia-event-aggregator/dist/amd/aurelia-event-aggregator","aurelia-framework":"../node_modules/aurelia-framework/dist/amd/aurelia-framework","aurelia-history":"../node_modules/aurelia-history/dist/amd/aurelia-history","aurelia-logging":"../node_modules/aurelia-logging/dist/amd/aurelia-logging","aurelia-loader":"../node_modules/aurelia-loader/dist/amd/aurelia-loader","aurelia-metadata":"../node_modules/aurelia-metadata/dist/amd/aurelia-metadata","aurelia-pal":"../node_modules/aurelia-pal/dist/amd/aurelia-pal","aurelia-history-browser":"../node_modules/aurelia-history-browser/dist/amd/aurelia-history-browser","aurelia-loader-default":"../node_modules/aurelia-loader-default/dist/amd/aurelia-loader-default","aurelia-polyfills":"../node_modules/aurelia-polyfills/dist/amd/aurelia-polyfills","aurelia-logging-console":"../node_modules/aurelia-logging-console/dist/amd/aurelia-logging-console","aurelia-pal-browser":"../node_modules/aurelia-pal-browser/dist/amd/aurelia-pal-browser","aurelia-path":"../node_modules/aurelia-path/dist/amd/aurelia-path","aurelia-route-recognizer":"../node_modules/aurelia-route-recognizer/dist/amd/aurelia-route-recognizer","aurelia-router":"../node_modules/aurelia-router/dist/amd/aurelia-router","aurelia-task-queue":"../node_modules/aurelia-task-queue/dist/amd/aurelia-task-queue","aurelia-templating":"../node_modules/aurelia-templating/dist/amd/aurelia-templating","aurelia-templating-binding":"../node_modules/aurelia-templating-binding/dist/amd/aurelia-templating-binding","text":"../node_modules/text/text","app-bundle":"../scripts/app-bundle"},"packages":[{"name":"aurelia-ui-virtualization","location":"../node_modules/aurelia-ui-virtualization/dist/amd","main":"aurelia-ui-virtualization"},{"name":"aurelia-templating-router","location":"../node_modules/aurelia-templating-router/dist/amd","main":"aurelia-templating-router"},{"name":"aurelia-testing","location":"../node_modules/aurelia-testing/dist/amd","main":"aurelia-testing"},{"name":"aurelia-templating-resources","location":"../node_modules/aurelia-templating-resources/dist/amd","main":"aurelia-templating-resources"}],"stubModules":["text"],"shim":{},"bundles":{"app-bundle":["app","environment","main","resources/index","app2"]}})}
+function _aureliaConfigureModuleLoader(){requirejs.config({"baseUrl":"src/","paths":{"aurelia-dependency-injection":"../node_modules/aurelia-dependency-injection/dist/amd/aurelia-dependency-injection","aurelia-binding":"../node_modules/aurelia-binding/dist/amd/aurelia-binding","aurelia-bootstrapper":"../node_modules/aurelia-bootstrapper/dist/amd/aurelia-bootstrapper","aurelia-framework":"../node_modules/aurelia-framework/dist/amd/aurelia-framework","aurelia-history":"../node_modules/aurelia-history/dist/amd/aurelia-history","aurelia-history-browser":"../node_modules/aurelia-history-browser/dist/amd/aurelia-history-browser","aurelia-logging":"../node_modules/aurelia-logging/dist/amd/aurelia-logging","aurelia-loader":"../node_modules/aurelia-loader/dist/amd/aurelia-loader","aurelia-metadata":"../node_modules/aurelia-metadata/dist/amd/aurelia-metadata","aurelia-pal":"../node_modules/aurelia-pal/dist/amd/aurelia-pal","aurelia-logging-console":"../node_modules/aurelia-logging-console/dist/amd/aurelia-logging-console","aurelia-loader-default":"../node_modules/aurelia-loader-default/dist/amd/aurelia-loader-default","aurelia-polyfills":"../node_modules/aurelia-polyfills/dist/amd/aurelia-polyfills","aurelia-pal-browser":"../node_modules/aurelia-pal-browser/dist/amd/aurelia-pal-browser","aurelia-path":"../node_modules/aurelia-path/dist/amd/aurelia-path","aurelia-route-recognizer":"../node_modules/aurelia-route-recognizer/dist/amd/aurelia-route-recognizer","aurelia-router":"../node_modules/aurelia-router/dist/amd/aurelia-router","aurelia-task-queue":"../node_modules/aurelia-task-queue/dist/amd/aurelia-task-queue","aurelia-templating":"../node_modules/aurelia-templating/dist/amd/aurelia-templating","aurelia-templating-binding":"../node_modules/aurelia-templating-binding/dist/amd/aurelia-templating-binding","text":"../node_modules/text/text","aurelia-event-aggregator":"../node_modules/aurelia-event-aggregator/dist/amd/aurelia-event-aggregator","app-bundle":"../scripts/app-bundle"},"packages":[{"name":"aurelia-ui-virtualization","location":"../node_modules/aurelia-ui-virtualization/dist/amd","main":"aurelia-ui-virtualization"},{"name":"aurelia-templating-resources","location":"../node_modules/aurelia-templating-resources/dist/amd","main":"aurelia-templating-resources"},{"name":"aurelia-templating-router","location":"../node_modules/aurelia-templating-router/dist/amd","main":"aurelia-templating-router"},{"name":"aurelia-testing","location":"../node_modules/aurelia-testing/dist/amd","main":"aurelia-testing"}],"stubModules":["text"],"shim":{},"bundles":{"app-bundle":["app","environment","main","resources/index","app2"]}})}
