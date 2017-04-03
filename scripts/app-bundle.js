@@ -61,7 +61,7 @@ define('app',['exports', 'aurelia-framework'], function (exports, _aureliaFramew
 
   var _dec, _desc, _value, _class;
 
-  var App = exports.App = (_dec = (0, _aureliaFramework.computedFrom)('query', 'items'), (_class = function () {
+  var App = exports.App = (_dec = (0, _aureliaFramework.computedFrom)('query', '_activeArray'), (_class = function () {
     function App() {
       _classCallCheck(this, App);
 
@@ -69,6 +69,7 @@ define('app',['exports', 'aurelia-framework'], function (exports, _aureliaFramew
       this.primaryItems = [];
       this.secondaryItems = [];
       this.query = '';
+      this._activeArray = 'a';
 
       for (var i = 0; i < 1000; i++) {
         this.primaryItems.push('item a: ' + i);
@@ -83,10 +84,12 @@ define('app',['exports', 'aurelia-framework'], function (exports, _aureliaFramew
 
     App.prototype.chooseArrayA = function chooseArrayA() {
       this.items = this.primaryItems;
+      this._activeArray = 'a';
     };
 
     App.prototype.chooseArrayB = function chooseArrayB() {
       this.items = this.secondaryItems;
+      this._activeArray = 'b';
     };
 
     App.prototype.getMore = function getMore() {
@@ -162,6 +165,6 @@ define('resources/index',["exports"], function (exports) {
   exports.configure = configure;
   function configure(config) {}
 });
-define('text!app.html', ['module'], function(module) { module.exports = "<template><style>.scroll-container{border:1px solid #000;width:200px}.scroll-container li,.scroll-container tr,.scroll-container>div{height:20px;outline:red solid 1px;list-style:none}</style><button click.trigger=\"chooseArrayA()\">Array A</button> <button click.trigger=\"chooseArrayB()\">Array B</button><br><input value.bind=\"query\" placeholder=\"search...\"><br><br><label>Fixed Height Container</label><div class=\"scroll-container\" style=\"height:200px;overflow:auto\"><div virtual-repeat.for=\"item of items\" infinite-scroll-next.call=\"getMore($scrollContext)\">${$index} ${item}</div></div></template>"; });
+define('text!app.html', ['module'], function(module) { module.exports = "<template><style>.scroll-container{border:1px solid #000;width:200px}.scroll-container li,.scroll-container tr,.scroll-container>div{height:20px;list-style:none;background-color:#00f}.scroll-container li:nth-child(odd),.scroll-container tr:nth-child(odd),.scroll-container>div:nth-child(odd){background-color:red}</style><button click.trigger=\"chooseArrayA()\">Array A</button> <button click.trigger=\"chooseArrayB()\">Array B</button><br><input value.bind=\"query\" placeholder=\"search...\"><br><br><label>Table Container</label><div class=\"scroll-container\" style=\"height:200px;overflow:auto\"><table><tr virtual-repeat.for=\"item of items\"><td>${$index}</td><td>${item}</td></tr></table></div></template>"; });
 define('text!app2.html', ['module'], function(module) { module.exports = "<template><style>.scroll-container{border:1px solid #000;width:200px;height:200px}.scroll-container li,.scroll-container tr,.scroll-container>div{height:20px;outline:red solid 1px}</style><button click.trigger=\"chooseArrayA()\">Array A</button> <button click.trigger=\"chooseArrayB()\">Array B</button><br><br><label>Fixed Height Container</label><div class=\"scroll-container\" style=\"overflow:auto\"><div virtual-repeat.for=\"item of items\" infinite-scroll-next.call=\"getMore($scrollContext)\">${$index} ${item}</div></div></template>"; });
 //# sourceMappingURL=app-bundle.js.map

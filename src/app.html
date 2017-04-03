@@ -9,8 +9,14 @@
     .scroll-container li,
     .scroll-container tr {
       height: 20px;
-      outline: red solid 1px;
       list-style: none;
+      background-color: blue;
+    }
+
+    .scroll-container > div:nth-child(odd), 
+    .scroll-container li:nth-child(odd),
+    .scroll-container tr:nth-child(odd) {
+      background-color: red;
     }
   </style>
   <button click.trigger="chooseArrayA()">Array A</button>
@@ -18,16 +24,16 @@
   <br>
   <input value.bind="query" placeholder="search..." />
 
-  <br>
+  <!--<br>
   <br>
   <label>Fixed Height Container</label>
   <div class="scroll-container" style="height: 200px; overflow: auto">
     <div virtual-repeat.for="item of items" infinite-scroll-next.call="getMore($scrollContext)">
       ${$index} ${item}
     </div>
-  </div>
+  </div>-->
 
-  <!--<br>
+  <br>
   <br>
   <label>Table Container</label>
   <div class="scroll-container" style="height: 200px; overflow: auto">
@@ -37,7 +43,7 @@
         <td>${item}</td>
       </tr>
     </table>
-  </div>-->
+  </div>
 
 <!--
   <br>
