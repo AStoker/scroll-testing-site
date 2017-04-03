@@ -1,0 +1,50 @@
+<template>
+  <style>
+    .scroll-container {
+      border: 1px solid black;
+      width: 200px;
+      height: 200px;
+    }
+    .scroll-container > div, 
+    .scroll-container li,
+    .scroll-container tr {
+      height: 20px;
+      outline: red solid 1px;
+    }
+  </style>
+  <button click.trigger="chooseArrayA()">Array A</button>
+  <button click.trigger="chooseArrayB()">Array B</button>
+
+  <br>
+  <br>
+  <label>Fixed Height Container</label>
+  <div class="scroll-container" style="overflow: auto">
+    <div virtual-repeat.for="item of items" infinite-scroll-next.call="getMore($scrollContext)">
+      ${$index} ${item}
+    </div>
+  </div>
+<!--
+  <br>
+  <br>
+  <label>Table Container</label>
+  <div class="scroll-container" style="height: 200px; overflow: auto">
+    <table>
+      <tr virtual-repeat.for="item of items">
+        <td>${$index}</td>
+        <td>${item}</td>
+      </tr>
+    </table>
+  </div>
+
+  <br>
+  <br>
+  <label>List Height Container</label>
+  <div class="scroll-container" style="height: 200px; overflow: auto">
+    <ul>
+      <li virtual-repeat.for="item of items">
+        ${$index} ${item}
+      </li>
+    </ul>
+  </div>-->
+
+</template>
